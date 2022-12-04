@@ -26,7 +26,7 @@ impl ElfCalorieCounter {
     }
 
     fn compare_and_add_elf(&mut self, new_elf: Elf) -> () {
-        if(self.top_elfs.len() == 0) {
+        if self.top_elfs.len() == 0 {
             self.top_elfs.push(new_elf);
             return;
         }
