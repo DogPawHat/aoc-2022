@@ -22,12 +22,7 @@ enum RPSMatchResult {
 }
 
 #[derive(Debug)]
-struct RPSMatch {
-    enemy: RPSPlay,
-    response: RPSPlay,
-    result: RPSMatchResult,
-    score: i32,
-}
+struct RPSMatch(i32);
 
 fn score_shape(shape: &RPSPlay) -> i32 {
     match shape {
@@ -80,15 +75,6 @@ fn map_enemy_to_play(val: &str) -> Result<RPSPlay, ElfRPSError> {
     }
 }
 
-fn map_response_to_play(val: &str) -> Result<RPSPlay, ElfRPSError> {
-    match val {
-        "X" => Ok(RPSPlay::Rock),
-        "Y" => Ok(RPSPlay::Paper),
-        "Z" => Ok(RPSPlay::Scissors),
-        _ => Err(ElfRPSError::CharToPlayErr),
-    }
-}
-
 fn map_str_to_result(val: &str) -> Result<RPSMatchResult, ElfRPSError> {
     match val {
         "X" => Ok(RPSMatchResult::Loss),
@@ -105,12 +91,7 @@ impl RPSMatch {
         let shape_score = score_shape(&response);
         let match_score = score_result(&result);
         assert!(desired_result == result, "Results are not good");
-        RPSMatch {
-            enemy,
-            response,
-            result,
-            score: shape_score + match_score,
-        }
+        RPSMatch(shape_score + match_score)
     }
 
     fn from_str_pair(enemy: &str, desired_result: &str) -> Result<Self, ElfRPSError> {
@@ -128,7 +109,7 @@ fn main() {
         .map(|line| (&line[0..1], &line[2..3]))
         .map(|(enemy, response)| RPSMatch::from_str_pair(enemy, response))
         .map(|rps_match_res| rps_match_res.expect("Error parsing match"))
-        .map(|m| m.score)
+        .map(|m| m.0)
         .sum();
 
     println!("Hello, world! Your Score is: <{}>", score);

@@ -1,4 +1,4 @@
-use std::{fs, str::Lines};
+use std::fs;
 
 const INPUT_PATH_STR: &str = "aoc-solution-2/input.txt";
 
@@ -21,13 +21,7 @@ enum RPSMatchResult {
     Draw,
 }
 
-#[derive(Debug)]
-struct RPSMatch {
-    enemy: RPSPlay,
-    response: RPSPlay,
-    result: RPSMatchResult,
-    score: i32,
-}
+struct RPSMatch(i32);
 
 fn score_shape(shape: &RPSPlay) -> i32 {
     match shape {
@@ -81,12 +75,7 @@ impl RPSMatch {
         let result = resolve_match(&enemy, &response);
         let shape_score = score_shape(&response);
         let match_score = score_result(&result);
-        RPSMatch {
-            enemy,
-            response,
-            result,
-            score: shape_score + match_score,
-        }
+        RPSMatch(match_score + shape_score)
     }
 
     fn from_str_pair(enemy: &str, response: &str) -> Result<Self, ElfRPSError> {
@@ -104,7 +93,7 @@ fn main() {
         .map(|line| (&line[0..1], &line[2..3]))
         .map(|(enemy, response)| RPSMatch::from_str_pair(enemy, response))
         .map(|rps_match_res| rps_match_res.expect("Error parsing match"))
-        .map(|m| m.score)
+        .map(|m| m.0)
         .sum();
 
     println!("Hello, world! Your Score is: <{}>", score);
