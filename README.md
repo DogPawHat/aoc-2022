@@ -9,5 +9,5 @@ Solutions in Rust
 Install [Rust 2021](https://www.rust-lang.org/tools/install) and use Cargo to run the solution:
 
 ```
-cargo run -p SOLUTION --bin PART
+cargo run --bin dayX_partY
 ```
