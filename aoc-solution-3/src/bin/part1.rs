@@ -24,7 +24,7 @@ fn get_rucksack_priority(val: &str) -> u32 {
 }
 
 fn main() {
-    let input = fs::read_to_string("input.txt").expect("borked file");
+    let input = fs::read_to_string("aoc-solution-3/input.txt").expect("borked file");
 
     let score: u32 = input
         .lines()

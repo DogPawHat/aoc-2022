@@ -1,6 +1,6 @@
 use std::{fs, str::Lines};
 
-const INPUT_PATH_STR: &str = "input.txt";
+const INPUT_PATH_STR: &str = "aoc-solution-2/input.txt";
 
 #[derive(Debug)]
 enum ElfRPSError {

@@ -30,7 +30,7 @@ fn parse_elf_job_pair(line: &str) -> ElfPairs {
 }
 
 fn main() {
-    let file = fs::read_to_string("input.txt").expect("could not read input");
+    let file = fs::read_to_string("aoc-solution-4/input.txt").expect("could not read input");
 
     let overlapped_jobs: i32 = file
         .lines()
