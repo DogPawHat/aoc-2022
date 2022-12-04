@@ -1,27 +1,26 @@
 use std::fs;
 
-const INPUT_PATH_STR: &str = "aoc-solution-2/input.txt";
+const INPUT_PATH_STR: &str = "inputs/day2.txt";
 
 #[derive(Debug)]
 enum ElfRPSError {
     CharToPlayErr,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, PartialEq)]
 enum RPSPlay {
     Rock,
     Paper,
     Scissors,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, PartialEq)]
 enum RPSMatchResult {
     Win,
     Loss,
     Draw,
 }
 
-#[derive(Debug)]
 struct RPSMatch(i32);
 
 fn score_shape(shape: &RPSPlay) -> i32 {
@@ -37,19 +36,6 @@ fn score_result(result: &RPSMatchResult) -> i32 {
         RPSMatchResult::Loss => 0,
         RPSMatchResult::Draw => 3,
         RPSMatchResult::Win => 6,
-    }
-}
-
-fn get_required_response(enemy: &RPSPlay, desired_result: &RPSMatchResult) -> RPSPlay {
-    match (enemy, desired_result) {
-        (a, b) if b == &RPSMatchResult::Draw => a.clone(),
-        (RPSPlay::Rock, RPSMatchResult::Win) => RPSPlay::Paper,
-        (RPSPlay::Rock, RPSMatchResult::Loss) => RPSPlay::Scissors,
-        (RPSPlay::Paper, RPSMatchResult::Win ) => RPSPlay::Scissors,
-        (RPSPlay::Paper,  RPSMatchResult::Loss) => RPSPlay::Rock,
-        (RPSPlay::Scissors, RPSMatchResult::Win) => RPSPlay::Rock,
-        (RPSPlay::Scissors, RPSMatchResult::Loss) => RPSPlay::Paper,
-        (_, _) => enemy.clone(),
     }
 }
 
@@ -75,29 +61,27 @@ fn map_enemy_to_play(val: &str) -> Result<RPSPlay, ElfRPSError> {
     }
 }
 
-fn map_str_to_result(val: &str) -> Result<RPSMatchResult, ElfRPSError> {
+fn map_response_to_play(val: &str) -> Result<RPSPlay, ElfRPSError> {
     match val {
-        "X" => Ok(RPSMatchResult::Loss),
-        "Y" => Ok(RPSMatchResult::Draw),
-        "Z" => Ok(RPSMatchResult::Win),
+        "X" => Ok(RPSPlay::Rock),
+        "Y" => Ok(RPSPlay::Paper),
+        "Z" => Ok(RPSPlay::Scissors),
         _ => Err(ElfRPSError::CharToPlayErr),
     }
 }
 
 impl RPSMatch {
-    fn new(enemy: RPSPlay, desired_result: RPSMatchResult) -> Self {
-        let response = get_required_response(&enemy, &desired_result);
+    fn new(enemy: RPSPlay, response: RPSPlay) -> Self {
         let result = resolve_match(&enemy, &response);
         let shape_score = score_shape(&response);
         let match_score = score_result(&result);
-        assert!(desired_result == result, "Results are not good");
-        RPSMatch(shape_score + match_score)
+        RPSMatch(match_score + shape_score)
     }
 
-    fn from_str_pair(enemy: &str, desired_result: &str) -> Result<Self, ElfRPSError> {
+    fn from_str_pair(enemy: &str, response: &str) -> Result<Self, ElfRPSError> {
         Ok(Self::new(
             map_enemy_to_play(enemy)?,
-            map_str_to_result(desired_result)?,
+            map_response_to_play(response)?,
         ))
     }
 }

@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::num::IntErrorKind;
 
-const INPUT_PATH_STR: &str = "aoc-solution-1/input.txt";
+const INPUT_PATH_STR: &str = "inputs/day1.txt";
 
 struct CalorieCounter {
     largest_calories: i32,

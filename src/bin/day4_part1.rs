@@ -2,6 +2,8 @@ use std::collections::HashSet;
 use std::fs;
 use std::ops::RangeInclusive;
 
+const INPUT_PATH_STR: &str = "inputs/day4.txt";
+
 struct ElfPairs(RangeInclusive<i32>, RangeInclusive<i32>);
 
 impl ElfPairs {
@@ -9,7 +11,7 @@ impl ElfPairs {
         let lesser_hash_a: HashSet<i32> = self.0.clone().collect();
         let lesser_hash_b: HashSet<i32> = self.1.clone().collect();
 
-        !lesser_hash_a.is_disjoint(&lesser_hash_b) || !lesser_hash_b.is_disjoint(&lesser_hash_a)
+        lesser_hash_a.is_subset(&lesser_hash_b) || lesser_hash_b.is_subset(&lesser_hash_a)
     }
 }
 
@@ -30,7 +32,7 @@ fn parse_elf_job_pair(line: &str) -> ElfPairs {
 }
 
 fn main() {
-    let file = fs::read_to_string("aoc-solution-4/input.txt").expect("could not read input");
+    let file = fs::read_to_string(INPUT_PATH_STR).expect("could not read input");
 
     let overlapped_jobs: i32 = file
         .lines()

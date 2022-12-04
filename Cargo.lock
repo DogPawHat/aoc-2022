@@ -3,23 +3,11 @@
 version = 3
 
 [[package]]
-name = "aoc-solution-1"
-version = "0.1.0"
-
-[[package]]
-name = "aoc-solution-2"
-version = "0.1.0"
-
-[[package]]
-name = "aoc-solution-3"
+name = "aoc-2022"
 version = "0.1.0"
 dependencies = [
  "itertools",
 ]
-
-[[package]]
-name = "aoc-solution-4"
-version = "0.1.0"
 
 [[package]]
 name = "either"

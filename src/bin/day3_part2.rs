@@ -1,6 +1,8 @@
 use itertools::Itertools;
 use std::fs;
 
+const INPUT_PATH_STR: &str = "inputs/day3.txt";
+
 fn char_to_priority(item: char) -> u32 {
     match item {
         'a'..='z' => item as u32 - 'a' as u32 + 1,
@@ -23,7 +25,7 @@ fn get_rucksack_priority((elf_1, elf_2, elf_3): (&str, &str, &str)) -> u32 {
 }
 
 fn main() {
-    let input = fs::read_to_string("aoc-solution-3/input.txt").expect("borked file");
+    let input = fs::read_to_string(INPUT_PATH_STR).expect("borked file");
 
     let score: u32 = input
         .lines()
