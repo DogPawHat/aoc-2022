@@ -53,7 +53,7 @@ impl ElfCrateStacks {
         ElfCrateStackTops { stack_tops }
     }
 
-    fn move_crates(&mut self, elf_move: &ElfCrateMove) {
+    fn cratemover_9000(&mut self, elf_move: &ElfCrateMove) {
         for _ in 0..elf_move.move_num {
             if let Some(moved_crate) = self.stacks[elf_move.from_stack - 1].pop() {
                 self.stacks[elf_move.to_stack - 1].push(moved_crate);
@@ -106,7 +106,7 @@ impl FromStr for ElfCrateMoves {
 fn part1(elf_stacks: &ElfCrateStacks, elf_moves: &ElfCrateMoves) -> ElfCrateStacks {
     let mut stacks_workspace = elf_stacks.clone();
     for crate_move in elf_moves.0.iter() {
-        stacks_workspace.move_crates(&crate_move);
+        stacks_workspace.cratemover_9000(&crate_move);
     }
     stacks_workspace
 }
