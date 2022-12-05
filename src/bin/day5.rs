@@ -45,7 +45,7 @@ impl ElfCrateStacks {
     fn get_tops_of_stacks(&self) -> ElfCrateStackTops {
         let stack_tops: Vec<String> = self
             .stacks
-            .iter()            
+            .iter()
             .map(|stack| stack.last().map(String::as_str).unwrap_or_else(|| " "))
             .map(String::from)
             .collect();
@@ -59,6 +59,14 @@ impl ElfCrateStacks {
                 self.stacks[elf_move.to_stack - 1].push(moved_crate);
             }
         }
+    }
+
+    fn cratemover_9001(&mut self, elf_move: &ElfCrateMove) {
+        let split_point = self.stacks[elf_move.from_stack - 1].len() - elf_move.move_num;
+        let mut moved_crate: Vec<String> = self.stacks[elf_move.from_stack - 1]
+            .drain(split_point..)
+            .collect();
+        self.stacks[elf_move.to_stack - 1].append(&mut moved_crate);
     }
 }
 
@@ -111,12 +119,29 @@ fn part1(elf_stacks: &ElfCrateStacks, elf_moves: &ElfCrateMoves) -> ElfCrateStac
     stacks_workspace
 }
 
+
+fn part2(elf_stacks: &ElfCrateStacks, elf_moves: &ElfCrateMoves) -> ElfCrateStacks {
+    let mut stacks_workspace = elf_stacks.clone();
+    for crate_move in elf_moves.0.iter() {
+        stacks_workspace.cratemover_9001(&crate_move);
+    }
+    stacks_workspace
+}
+
 fn main() -> Result<()> {
     let elf_stacks: ElfCrateStacks = STACKS_FILE.parse()?;
     let elf_moves: ElfCrateMoves = MOVES_FILE.parse()?;
 
     let part1_score = part1(&elf_stacks, &elf_moves);
+    let part2_score = part2(&elf_stacks, &elf_moves);
 
-    println!("Part 1: <{}>", part1_score.get_tops_of_stacks().to_string());
+    println!(
+        "Part 1 - CrateMover 9000: <{}>",
+        part1_score.get_tops_of_stacks().to_string()
+    );
+    println!(
+        "Part 1 - CrateMover 9001: <{}>",
+        part2_score.get_tops_of_stacks().to_string()
+    );
     Ok(())
 }
