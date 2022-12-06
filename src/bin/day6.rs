@@ -1,40 +1,56 @@
-use std::fmt;
+use std::collections::HashSet;
 use std::fs;
-use std::str::FromStr;
 
-use anyhow::{Error, Ok, Result};
+use anyhow::{Ok, Result};
 use lazy_static::lazy_static;
-use regex::Regex;
 
-const STACKS_INPUT: &str = "inputs/day5/stacks.csv";
-
-const MOVES_INPUT: &str = "inputs/day5/moves.txt";
+const INPUT_PATH: &str = "inputs/day6.txt";
+const SOP_SIZE: usize = 4;
+const SOM_SIZE: usize = 14;
 
 lazy_static! {
     static ref STACKS_FILE: String =
-        fs::read_to_string(STACKS_INPUT).expect("Day5 - Inputs: Can't parse stacks");
-    static ref MOVES_FILE: String =
-        fs::read_to_string(MOVES_INPUT).expect("Day5 - Inputs: Can't parse moves");
-    static ref MOVE_REGEX: Regex = Regex::new(
-        r"move (?P<move_num>[0-9]+) from (?P<from_stack>[0-9]+) to (?P<to_stack>[0-9]+)"
-    )
-    .expect("Day 5 - Inputs: Effed up the regex");
+        fs::read_to_string(INPUT_PATH).expect("Day5 - Inputs: Can't parse stacks");
+}
+
+fn part1(input: &str) -> u32 {
+    let mut count = SOP_SIZE as u32;
+    let mut input_seeker = input.chars();
+
+    for _ in 0..input.len() {
+        let char_set: HashSet<char> = input_seeker.clone().take(SOP_SIZE).collect();
+        if char_set.len() == SOP_SIZE {
+            break;
+        }
+        count = count + 1;
+        input_seeker.next();
+    }
+    count
+}
+
+fn part2(input: &str) -> u32 {
+    let mut count = SOM_SIZE as u32;
+    let mut input_seeker = input.chars();
+
+    for _ in 0..input.len() {
+        let char_set: HashSet<char> = input_seeker.clone().take(SOM_SIZE).collect();
+        if char_set.len() == SOM_SIZE {
+            break;
+        }
+        count = count + 1;
+        input_seeker.next();
+    }
+    count
 }
 
 fn main() -> Result<()> {
-    let elf_stacks: ElfCrateStacks = STACKS_FILE.parse()?;
-    let elf_moves: ElfCrateMoves = MOVES_FILE.parse()?;
-
-    let part1_score = part1(&elf_stacks, &elf_moves);
-    let part2_score = part2(&elf_stacks, &elf_moves);
-
     println!(
-        "Part 1 - CrateMover 9000: <{}>",
-        part1_score.get_tops_of_stacks().to_string()
+        "Part 1 - Chars to first start-of-packet: <{}>",
+        part1(&STACKS_FILE)
     );
     println!(
-        "Part 1 - CrateMover 9001: <{}>",
-        part2_score.get_tops_of_stacks().to_string()
+        "Part 2 - Chars to first start-of-message: <{}>",
+        part2(&STACKS_FILE)
     );
     Ok(())
 }
