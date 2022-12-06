@@ -13,28 +13,13 @@ lazy_static! {
         fs::read_to_string(INPUT_PATH).expect("Day5 - Inputs: Can't parse stacks");
 }
 
-fn part1(input: &str) -> u32 {
-    let mut count = SOP_SIZE as u32;
+fn count_to_first_marker(input: &str, marker_size: usize) -> u32 {
+    let mut count = marker_size as u32;
     let mut input_seeker = input.chars();
 
     for _ in 0..input.len() {
-        let char_set: HashSet<char> = input_seeker.clone().take(SOP_SIZE).collect();
-        if char_set.len() == SOP_SIZE {
-            break;
-        }
-        count = count + 1;
-        input_seeker.next();
-    }
-    count
-}
-
-fn part2(input: &str) -> u32 {
-    let mut count = SOM_SIZE as u32;
-    let mut input_seeker = input.chars();
-
-    for _ in 0..input.len() {
-        let char_set: HashSet<char> = input_seeker.clone().take(SOM_SIZE).collect();
-        if char_set.len() == SOM_SIZE {
+        let char_set: HashSet<char> = input_seeker.clone().take(marker_size).collect();
+        if char_set.len() == marker_size {
             break;
         }
         count = count + 1;
@@ -46,11 +31,11 @@ fn part2(input: &str) -> u32 {
 fn main() -> Result<()> {
     println!(
         "Part 1 - Chars to first start-of-packet: <{}>",
-        part1(&STACKS_FILE)
+        count_to_first_marker(&STACKS_FILE, SOP_SIZE)
     );
     println!(
         "Part 2 - Chars to first start-of-message: <{}>",
-        part2(&STACKS_FILE)
+        count_to_first_marker(&STACKS_FILE, SOM_SIZE)
     );
     Ok(())
 }
