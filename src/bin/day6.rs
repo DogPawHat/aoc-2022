@@ -10,7 +10,7 @@ const SOM_SIZE: usize = 14;
 
 lazy_static! {
     static ref STACKS_FILE: String =
-        fs::read_to_string(INPUT_PATH).expect("Day5 - Inputs: Can't parse stacks");
+        fs::read_to_string(INPUT_PATH).expect("Day 6 - Inputs: Can't parse file");
 }
 
 fn count_to_first_marker(input: &str, marker_size: usize) -> u32 {
