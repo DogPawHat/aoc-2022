@@ -8,6 +8,8 @@ use lazy_static::lazy_static;
 
 const INPUT_PATH: &str = "inputs/day7.txt";
 const BIG_DIRECTORY_SIZE: u32 = 100000;
+const TOTAL_DISK_SIZE: u32 = 70000000;
+const UNUSED_DISK_SIZE_TARGET: u32 = 30000000;
 
 lazy_static! {
     static ref INPUT_FILE: String =
@@ -71,7 +73,7 @@ impl ElfSized for ElfFile {
 impl ElfDirectory {
     fn special_size(&self) -> u32 {
         let full = self.full_size();
-        let this_special = if(full < 100000) {
+        let this_special = if full < BIG_DIRECTORY_SIZE {
             full
         } else {
             0
@@ -84,6 +86,19 @@ impl ElfDirectory {
             .filter_map(|f| f.ok())
             .map(|g| g.special_size())
             .sum::<u32>() + this_special
+    }
+
+    fn get_size_sort(&self) -> Vec<(&String, &Rc<RefCell<ElfDirectory>>)> {
+        let mut dir_vec: Vec<_> = self.directories.0.iter().collect();
+
+        dir_vec.sort_by(|a, b| {
+            let a_size = a.1.try_borrow().unwrap().full_size();
+            let b_size = b.1.try_borrow().unwrap().full_size();
+
+            a_size.cmp(&b_size)
+        });
+
+        dir_vec
     }
 }
 
@@ -155,17 +170,17 @@ fn line_mapper(line: &str) -> Result<ElfTerminalLine> {
     }
 }
 
-fn part1(terminal_output: &str) -> Result<u32> {
+fn construct_file_system(terminal_output: &str) -> Result<Rc<RefCell<ElfDirectory>>> {
     let command_iter = terminal_output.lines().map(line_mapper);
 
-    let root_dir_root_rc = Rc::new(RefCell::new(ElfDirectory {
+    let root_dir_rc_cell = Rc::new(RefCell::new(ElfDirectory {
         parent: ElfParentDirectory::Root,
         directories: ElfDirectorys(HashMap::new()),
         files: ElfFiles(HashMap::new()),
     }));
 
     {
-        let mut cursor_dir_root_rc = Rc::clone(&root_dir_root_rc);
+        let mut cursor_dir_root_rc = Rc::clone(&root_dir_rc_cell);
 
         for line_res in command_iter {
             match line_res {
@@ -177,9 +192,43 @@ fn part1(terminal_output: &str) -> Result<u32> {
         }
     }
 
-    let size = root_dir_root_rc.try_borrow()?.special_size();
+    Ok(root_dir_rc_cell)
+}
+
+fn part1(terminal_output: &str) -> Result<u32> {
+    let root_dir = construct_file_system(terminal_output)?;
+
+    let size = root_dir.try_borrow()?.special_size();
     Ok(size)
 }
+
+// fn part2(terminal_output: &str) -> Result<u32> {
+//     let root_dir = construct_file_system(terminal_output)?;
+
+//     let full_root_size = root_dir.try_borrow()?.full_size();
+//     let free_size = TOTAL_DISK_SIZE - full_root_size;
+//     let need_to_delete = UNUSED_DISK_SIZE_TARGET - free_size;
+//     dbg!(full_root_size);
+//     dbg!(free_size);
+//     dbg!(need_to_delete);
+
+//     let mut smallest_dir = Rc::clone(&root_dir);
+//     loop {
+//         let smol_rc = Rc::clone(&smallest_dir);
+//         let smol_ref = smol_rc.try_borrow()?;
+//         let res = smol_ref.get_smallest_dir()?;
+//         if let Some((_smol_key, smol_dir)) = res {
+//             let smol_size = smol_dir.try_borrow()?.full_size();
+//             if smol_size < need_to_delete {
+//                 break;
+//             }
+//             smallest_dir = smol_dir;
+//         }
+//     }
+
+//     let size = smallest_dir.try_borrow()?.full_size();
+//     Ok(size)
+// }
 
 fn main() -> Result<()> {
     println!(
@@ -187,5 +236,9 @@ fn main() -> Result<()> {
         BIG_DIRECTORY_SIZE,
         part1(&INPUT_FILE)?
     );
+    // println!(
+    //     "Part 2: <{}>",
+    //     part2(&INPUT_FILE)?
+    // );
     Ok(())
 }
