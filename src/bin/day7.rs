@@ -1,10 +1,14 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs;
+use std::iter::Iterator;
 use std::rc::Rc;
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Context};
 use lazy_static::lazy_static;
+
+pub type Error = anyhow::Error;
+pub type Result<T> = anyhow::Result<T>;
 
 const INPUT_PATH: &str = "inputs/day7.txt";
 const BIG_DIRECTORY_SIZE: u32 = 100000;
@@ -14,18 +18,26 @@ lazy_static! {
         fs::read_to_string(INPUT_PATH).expect("Day 7 - Inputs: Can't parse stacks");
 }
 
-trait ElfSized {
-    fn full_size(&self) -> u32;
+enum ElfTerminalBlock {
+    CdCommandUp,
+    CdCommandDown {
+        dir_name: String,
+    },
+    LsCommand {
+        dir_listing: Vec<(ElfFileAttribute, String)>,
+    },
 }
 
+enum ElfFileAttribute {
+    Dir,
+    Size(u32),
+}
 
 #[derive(Debug)]
-struct ElfDirectorys(HashMap<String, Rc<RefCell<ElfDirectory>>>);
-
-
-#[derive(Debug)]
-struct ElfFiles(HashMap<String, ElfFile>);
-
+enum ElfParentDirectory {
+    Root,
+    NonRoot(usize),
+}
 
 #[derive(Debug)]
 struct ElfFile {
@@ -33,138 +45,180 @@ struct ElfFile {
 }
 
 #[derive(Debug)]
-enum ElfParentDirectory {
-    Root,
-    NonRoot(Rc<RefCell<ElfDirectory>>),
-}
-
-
-#[derive(Debug)]
 struct ElfDirectory {
     parent: ElfParentDirectory,
-    directories: ElfDirectorys,
-    files: ElfFiles,
+    directories: HashMap<String, usize>,
+    files: HashMap<String, usize>,
 }
 
-enum ElfTerminalLine {
-    CdCommand { dir: String },
-    LsCommand,
-    FileListing { size: u32, file: String },
-    DirectoryListing { dir: String },
+#[derive(Debug)]
+struct ElfFileSystem {
+    directories: Vec<ElfDirectory>,
+    files: Vec<ElfFile>,
 }
 
-impl ElfSized for ElfDirectory {
-    fn full_size(&self) -> u32 {
-        self.directories
-            .0
-            .iter()
-            .map(|c| c.1.try_borrow())
-            .filter_map(|f| f.ok())
-            .map(|g| g.full_size())
-            .sum::<u32>()
-            + self.files.0.iter().map(|c| c.1.full_size()).sum::<u32>()
+#[derive(Debug)]
+struct ElfDirectorys(HashMap<String, Rc<RefCell<ElfDirectory>>>);
+
+#[derive(Debug)]
+struct ElfFiles(HashMap<String, ElfFile>);
+
+fn process_blocks(block: &str) -> Result<ElfTerminalBlock> {
+    match block.trim().lines().next() {
+        Some("ls") => {
+            let dir_listing_res: Result<Vec<(ElfFileAttribute, String)>> = block
+                .lines()
+                .skip(1)
+                .map(|line| line.split_once(" ").ok_or(anyhow!("derp")))
+                .map(|split_res| {
+                    let (attr, name) = split_res.context("bleg")?;
+                    let thing = match attr {
+                        "dir" => (ElfFileAttribute::Dir, String::from(name)),
+                        _ => (
+                            ElfFileAttribute::Size(attr.parse::<u32>()?),
+                            String::from(name),
+                        ),
+                    };
+                    Ok(thing)
+                })
+                .collect();
+            Ok(ElfTerminalBlock::LsCommand {
+                dir_listing: dir_listing_res?,
+            })
+        }
+        Some("cd /") => Ok(ElfTerminalBlock::CdCommandUp),
+        Some(cd_dir) => Ok(ElfTerminalBlock::CdCommandDown {
+            dir_name: String::from(cd_dir.split_once(" ").ok_or(anyhow!("derp"))?.1),
+        }),
+        None => bail!("derp"),
     }
 }
 
-impl ElfSized for ElfFile {
-    fn full_size(&self) -> u32 {
-        self.size
+impl ElfFileSystem {
+    fn new() -> Self {
+        Self {
+            directories: vec![],
+            files: vec![],
+        }
     }
-}
 
-fn process_terminal_line(
-    dir_rc_cell: Rc<RefCell<ElfDirectory>>,
-    command: &ElfTerminalLine,
-) -> Result<Rc<RefCell<ElfDirectory>>> {
-    match command {
-        ElfTerminalLine::DirectoryListing { dir } => {
-            dir_rc_cell.try_borrow_mut()?.directories.0.insert(
-                dir.clone(),
-                Rc::new(RefCell::new(ElfDirectory {
-                    parent: ElfParentDirectory::NonRoot(Rc::clone(&dir_rc_cell)),
-                    files: ElfFiles(HashMap::new()),
-                    directories: ElfDirectorys(HashMap::new()),
-                })),
-            );
-            Ok(Rc::clone(&dir_rc_cell))
-        }
-        ElfTerminalLine::FileListing { size, file } => {
-            dir_rc_cell
-                .try_borrow_mut()?
-                .files
-                .0
-                .insert(file.clone(), ElfFile { size: *size });
-            Ok(Rc::clone(&dir_rc_cell))
-        }
-        ElfTerminalLine::CdCommand { dir } => match dir.as_str() {
-            "/" => Ok(Rc::clone(&dir_rc_cell)),
-            ".." => {
-                let parent = &(*dir_rc_cell.try_borrow()?).parent;
+    // fn get_root_dir(&self) -> &ElfDirectory {
+    //     &self.directories[0]
+    // }
 
-                match parent {
-                    ElfParentDirectory::Root => bail!("Can not cd past root!"),
-                    ElfParentDirectory::NonRoot(parent_dir) => Ok(Rc::clone(&parent_dir)),
-                }
-            } 
-            _ => {
-                if let Some(child_dir_cell) = dir_rc_cell.borrow_mut().directories.0.get_mut(dir) {
-                    Ok(Rc::clone(&child_dir_cell))
-                } else {
-                    bail!("Processing error")
+    // fn get_root_dir_mut(&mut self) -> &mut ElfDirectory {
+    //     &mut self.directories[0]
+    // }
+
+    // fn get_dir(&self, parent: &mut ElfDirectory, name: &str) -> &ElfDirectory {
+    //     let idx = parent.directories.get(name).ok_or(anyhow!("pain"))?;
+
+    //     &self.directories[*idx]
+    // }
+
+    // fn get_dir_mut(&mut self, parent: &mut ElfDirectory, name: &str) -> &mut ElfDirectory {
+    //     let idx = parent.directories.get(name).ok_or(anyhow!("pain"))?;
+
+    //     &mut self.directories[*idx]
+    // }
+
+    // fn get_file(&self, parent: &mut ElfDirectory, name: &str) -> &ElfFile {
+    //     let idx = parent.files.get(name).ok_or(anyhow!("pain"))?;
+
+    //     &self.files[*idx]
+    // }
+
+    // fn get_file_mut(&mut self, parent: &mut ElfDirectory, name: &str) -> &mut ElfFile {
+    //     let idx = parent.directories.get(name).ok_or(anyhow!("pain"))?;
+
+    //     &mut self.files[*idx]
+    // }
+
+    fn get_total_size(&self) -> u32 {
+        self.files.iter().map(|f| f.size).sum()
+    }
+
+    fn process_command(
+        &mut self,
+        cursor_dir_idx: &mut usize,
+        block: &ElfTerminalBlock,
+    ) -> Result<()> {
+        match block {
+            ElfTerminalBlock::CdCommandUp => {
+                let cursor_dir = self
+                    .directories
+                    .get(*cursor_dir_idx)
+                    .ok_or(anyhow!("aldjfoa"))?;
+
+                match cursor_dir.parent {
+                    ElfParentDirectory::Root => bail!("OH DEAR"),
+                    ElfParentDirectory::NonRoot(idx) => {
+                        *cursor_dir_idx = idx;
+                    }
                 }
             }
-        },
-        ElfTerminalLine::LsCommand => Ok(Rc::clone(&dir_rc_cell)),
-    }
-}
+            ElfTerminalBlock::CdCommandDown { dir_name } => {
+                let cursor_dir = self
+                    .directories
+                    .get(*cursor_dir_idx)
+                    .ok_or(anyhow!("aldjfoa"))?;
 
-fn line_mapper(line: &str) -> Result<ElfTerminalLine> {
-    let line_space_split: Vec<_> = line.split(" ").collect();
+                *cursor_dir_idx = *cursor_dir
+                    .directories
+                    .get(dir_name.as_str())
+                    .ok_or(anyhow!("Did not get index for {}", &dir_name))?;
+            }
+            ElfTerminalBlock::LsCommand { dir_listing } => {
+                for (attr, name) in dir_listing.iter() {
+                    match attr {
+                        ElfFileAttribute::Dir => {
+                            self.directories.push(ElfDirectory {
+                                parent: ElfParentDirectory::NonRoot(*cursor_dir_idx),
+                                directories: HashMap::new(),
+                                files: HashMap::new(),
+                            });
 
-    match (line_space_split[0], line_space_split[1]) {
-        ("$", "cd") => Ok(ElfTerminalLine::CdCommand {
-            dir: String::from(line_space_split[2]),
-        }),
-        ("$", "ls") => Ok(ElfTerminalLine::LsCommand),
-        ("dir", _) => Ok(ElfTerminalLine::DirectoryListing {
-            dir: String::from(line_space_split[1]),
-        }),
-        (_, _) => match line_space_split[0].parse::<u32>() {
-            Ok(size) => Ok(ElfTerminalLine::FileListing {
-                size,
-                file: String::from(line_space_split[1]),
-            }),
-            Err(error) => Err(anyhow::Error::from(error)),
-        },
+                            let len = self.directories.len();
+                            let cursor_dir = self
+                                .directories
+                                .get_mut(*cursor_dir_idx)
+                                .ok_or(anyhow!("aldjfoa"))?;
+
+                            cursor_dir.directories.insert(name.clone(), len - 1);
+                        }
+                        ElfFileAttribute::Size(size) => {
+                            self.files.push(ElfFile { size: *size });
+
+                            let len = self.directories.len();
+                            let cursor_dir = self
+                                .directories
+                                .get_mut(*cursor_dir_idx)
+                                .ok_or(anyhow!("aldjfoa"))?;
+
+                            cursor_dir.files.insert(name.clone(), len - 1);
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
 fn part1(terminal_output: &str) -> Result<u32> {
-    let command_iter = terminal_output.lines().map(line_mapper);
+    let mut efs = ElfFileSystem::new();
+    let commands_iter = terminal_output.split("$").map(&process_blocks);
 
-    let root_dir_root_rc = Rc::new(RefCell::new(ElfDirectory {
-        parent: ElfParentDirectory::Root,
-        directories: ElfDirectorys(HashMap::new()),
-        files: ElfFiles(HashMap::new()),
-    }));
-
-    {
-        let mut cursor_dir_root_rc = Rc::clone(&root_dir_root_rc);
-
-        for line_res in command_iter {
-            match line_res {
-                Ok(line) => {
-                    cursor_dir_root_rc = process_terminal_line(cursor_dir_root_rc, &line)?;
-                }
-                _ => bail!("Ahhhhhhhhh"),
-            }
+    for command_res in commands_iter {
+        let mut cursor_dir_idx: usize = 0;
+        match command_res {
+            Err(err) => bail!("Ahhhhh, {}", err),
+            Ok(block) => efs.process_command(&mut cursor_dir_idx, &block)?,
         }
     }
 
-    dbg!(root_dir_root_rc.try_borrow()?);
-
-    let size = root_dir_root_rc.try_borrow()?.full_size();
-    Ok(size)
+    Ok(efs.get_total_size())
 }
 
 fn main() -> Result<()> {
