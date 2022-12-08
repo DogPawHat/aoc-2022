@@ -18,14 +18,11 @@ trait ElfSized {
     fn full_size(&self) -> u32;
 }
 
-
 #[derive(Debug)]
 struct ElfDirectorys(HashMap<String, Rc<RefCell<ElfDirectory>>>);
 
-
 #[derive(Debug)]
 struct ElfFiles(HashMap<String, ElfFile>);
-
 
 #[derive(Debug)]
 struct ElfFile {
@@ -37,7 +34,6 @@ enum ElfParentDirectory {
     Root,
     NonRoot(Rc<RefCell<ElfDirectory>>),
 }
-
 
 #[derive(Debug)]
 struct ElfDirectory {
@@ -72,6 +68,26 @@ impl ElfSized for ElfFile {
     }
 }
 
+impl ElfDirectory {
+    fn special_size(&self) -> u32 {
+        let full = self.full_size();
+        let this_special = if(full < 100000) {
+            full
+        } else {
+            0
+        };
+
+        self.directories
+            .0
+            .iter()
+            .map(|c| c.1.try_borrow())
+            .filter_map(|f| f.ok())
+            .map(|g| g.special_size())
+            .sum::<u32>() + this_special
+    }
+}
+
+
 fn process_terminal_line(
     dir_rc_cell: Rc<RefCell<ElfDirectory>>,
     command: &ElfTerminalLine,
@@ -105,7 +121,7 @@ fn process_terminal_line(
                     ElfParentDirectory::Root => bail!("Can not cd past root!"),
                     ElfParentDirectory::NonRoot(parent_dir) => Ok(Rc::clone(&parent_dir)),
                 }
-            } 
+            }
             _ => {
                 if let Some(child_dir_cell) = dir_rc_cell.borrow_mut().directories.0.get_mut(dir) {
                     Ok(Rc::clone(&child_dir_cell))
@@ -161,9 +177,7 @@ fn part1(terminal_output: &str) -> Result<u32> {
         }
     }
 
-    dbg!(root_dir_root_rc.try_borrow()?);
-
-    let size = root_dir_root_rc.try_borrow()?.full_size();
+    let size = root_dir_root_rc.try_borrow()?.special_size();
     Ok(size)
 }
 

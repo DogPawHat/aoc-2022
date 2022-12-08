@@ -4,7 +4,7 @@ use std::fs;
 use std::iter::Iterator;
 use std::rc::Rc;
 
-use anyhow::{anyhow, bail, Context};
+use anyhow::{anyhow, bail};
 use lazy_static::lazy_static;
 
 pub type Error = anyhow::Error;
@@ -18,8 +18,10 @@ lazy_static! {
         fs::read_to_string(INPUT_PATH).expect("Day 7 - Inputs: Can't parse stacks");
 }
 
+#[derive(Debug)]
 enum ElfTerminalBlock {
     CdCommandUp,
+    CdCommandRoot,
     CdCommandDown {
         dir_name: String,
     },
@@ -28,6 +30,7 @@ enum ElfTerminalBlock {
     },
 }
 
+#[derive(Debug)]
 enum ElfFileAttribute {
     Dir,
     Size(u32),
@@ -64,14 +67,18 @@ struct ElfDirectorys(HashMap<String, Rc<RefCell<ElfDirectory>>>);
 struct ElfFiles(HashMap<String, ElfFile>);
 
 fn process_blocks(block: &str) -> Result<ElfTerminalBlock> {
-    match block.trim().lines().next() {
+    let f_block = block.trim().lines().next();
+    match f_block {
         Some("ls") => {
             let dir_listing_res: Result<Vec<(ElfFileAttribute, String)>> = block
                 .lines()
                 .skip(1)
-                .map(|line| line.split_once(" ").ok_or(anyhow!("derp")))
+                .map(|line| {
+                    line.split_once(" ")
+                        .ok_or_else(|| anyhow!("Problem with line: {:?}", line))
+                })
                 .map(|split_res| {
-                    let (attr, name) = split_res.context("bleg")?;
+                    let (attr, name) = split_res?;
                     let thing = match attr {
                         "dir" => (ElfFileAttribute::Dir, String::from(name)),
                         _ => (
@@ -86,11 +93,17 @@ fn process_blocks(block: &str) -> Result<ElfTerminalBlock> {
                 dir_listing: dir_listing_res?,
             })
         }
-        Some("cd /") => Ok(ElfTerminalBlock::CdCommandUp),
+        Some("cd /") => Ok(ElfTerminalBlock::CdCommandRoot),
+        Some("cd ..") => Ok(ElfTerminalBlock::CdCommandUp),
         Some(cd_dir) => Ok(ElfTerminalBlock::CdCommandDown {
-            dir_name: String::from(cd_dir.split_once(" ").ok_or(anyhow!("derp"))?.1),
+            dir_name: String::from(
+                cd_dir
+                    .split_once(" ")
+                    .ok_or(anyhow!("Problem with line: {:?}", cd_dir))?
+                    .1,
+            ),
         }),
-        None => bail!("derp"),
+        None => bail!("Look at this shit: {:?}", block),
     }
 }
 
@@ -143,7 +156,18 @@ impl ElfFileSystem {
         cursor_dir_idx: &mut usize,
         block: &ElfTerminalBlock,
     ) -> Result<()> {
+        dbg!(*cursor_dir_idx);
         match block {
+            ElfTerminalBlock::CdCommandRoot => {
+                *self = Self {
+                    directories: vec![ElfDirectory {
+                        parent: ElfParentDirectory::Root,
+                        directories: HashMap::new(),
+                        files: HashMap::new(),
+                    }],
+                    files: vec![],
+                }
+            }
             ElfTerminalBlock::CdCommandUp => {
                 let cursor_dir = self
                     .directories
@@ -163,10 +187,14 @@ impl ElfFileSystem {
                     .get(*cursor_dir_idx)
                     .ok_or(anyhow!("aldjfoa"))?;
 
-                *cursor_dir_idx = *cursor_dir
+                dbg!(*cursor_dir_idx);
+                dbg!(&self.directories[0]);
+                dbg!(cursor_dir);
+                (*cursor_dir_idx = *cursor_dir
                     .directories
                     .get(dir_name.as_str())
-                    .ok_or(anyhow!("Did not get index for {}", &dir_name))?;
+                    .ok_or(anyhow!("Did not get index for {}", &dir_name))?);
+                dbg!(*cursor_dir_idx);
             }
             ElfTerminalBlock::LsCommand { dir_listing } => {
                 for (attr, name) in dir_listing.iter() {
@@ -208,10 +236,13 @@ impl ElfFileSystem {
 
 fn part1(terminal_output: &str) -> Result<u32> {
     let mut efs = ElfFileSystem::new();
-    let commands_iter = terminal_output.split("$").map(&process_blocks);
+    let commands_iter = terminal_output
+        .split("$")
+        .filter(|&s| s != "")
+        .map(&process_blocks);
 
+    let mut cursor_dir_idx: usize = 0;
     for command_res in commands_iter {
-        let mut cursor_dir_idx: usize = 0;
         match command_res {
             Err(err) => bail!("Ahhhhh, {}", err),
             Ok(block) => efs.process_command(&mut cursor_dir_idx, &block)?,
