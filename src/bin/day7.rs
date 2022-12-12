@@ -1,10 +1,11 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs;
+use std::hash::Hash;
 use std::iter::Iterator;
-use std::rc::Rc;
+use std::path::PathBuf;
 
 use anyhow::{anyhow, bail};
+use itertools::Itertools;
 use lazy_static::lazy_static;
 
 pub type Error = anyhow::Error;
@@ -16,6 +17,37 @@ const BIG_DIRECTORY_SIZE: u32 = 100000;
 lazy_static! {
     static ref INPUT_FILE: String =
         fs::read_to_string(INPUT_PATH).expect("Day 7 - Inputs: Can't parse stacks");
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+struct ElfContentIndex {
+    full_path: PathBuf,
+}
+
+#[derive(Debug)]
+struct ElfContent {
+    parent: Option<ElfContentIndex>,
+    kind: ElfContentKind,
+}
+
+#[derive(Debug)]
+enum ElfContentKind {
+    File { size: u32 },
+    Dir { children: Vec<ElfContentIndex> },
+}
+
+impl ElfContent {
+    fn is_valid(&self) {
+        match &self.kind {
+            ElfContentKind::File { size: _ } => assert!(self.parent.is_some()),
+            ElfContentKind::Dir { children: _ } => (),
+        }
+    }
+}
+
+struct ElfFileSystem {
+    root: ElfContentIndex,
+    items: HashMap<ElfContentIndex, ElfContent>,
 }
 
 #[derive(Debug)]
@@ -36,35 +68,131 @@ enum ElfFileAttribute {
     Size(u32),
 }
 
-#[derive(Debug)]
-enum ElfParentDirectory {
-    Root,
-    NonRoot(usize),
+impl ElfFileSystem {
+    fn new() -> Self {
+        Self {
+            items: HashMap::new(),
+            root: ElfContentIndex {
+                full_path: PathBuf::from("invalid"),
+            },
+        }
+    }
+
+    fn get_size_of_node(&self, index: &ElfContentIndex) -> Result<u32> {
+        let this_node = self
+            .items
+            .get(&index)
+            .ok_or_else(|| anyhow!("did not get node"))?;
+        match &this_node.kind {
+            ElfContentKind::File { size } => Ok(*size),
+            ElfContentKind::Dir { children } => {
+                children.iter().map(|child| self.get_size_of_node(&child)).sum()
+            }
+        }
+    }
+
+    // fn get_total_size(&self) -> Result<u32> {
+    //     self.get_size_of_node(&self.root)
+    // }
+
+    fn get_part1_size(&self) -> Result<u32> {
+        self.items.iter().filter(|(_idx, content)| {
+            if let ElfContentKind::Dir { children: _ } = content.kind {
+                true
+            } else {
+                false
+            }
+        }).map(|(idx, _content)| self.get_size_of_node(idx)).map_ok(|size| {
+            if size < BIG_DIRECTORY_SIZE {
+                size
+            } else {
+                0
+            }
+        }).sum()
+    }
+
+    fn process_command(
+        &mut self,
+        pos: &ElfContentIndex,
+        block: &ElfTerminalBlock,
+    ) -> Result<ElfContentIndex> {
+        match block {
+            ElfTerminalBlock::CdCommandRoot => {
+                let new_root_idx = ElfContentIndex {
+                    full_path: PathBuf::from(r"efs-root"),
+                };
+
+                self.root = new_root_idx;
+                self.items = HashMap::from([(
+                    self.root.clone(),
+                    ElfContent {
+                        parent: None,
+                        kind: ElfContentKind::Dir { children: vec![] },
+                    },
+                )]);
+                Ok(self.root.clone())
+            }
+            ElfTerminalBlock::CdCommandUp => {
+                let node = self.items.get(&pos).ok_or_else(|| anyhow!("No node"))?;
+                match &node.parent {
+                    None => bail!("Can't CD past root"),
+                    Some(parent_pos) => Ok(parent_pos.clone()),
+                }
+            }
+            ElfTerminalBlock::CdCommandDown { dir_name } => {
+                self.items.get(&pos).ok_or_else(|| anyhow!("No node"))?;
+                let new_pos = ElfContentIndex {
+                    full_path: [
+                        pos.full_path
+                            .to_str()
+                            .ok_or(anyhow!("path to string fail"))?,
+                        dir_name.as_str(),
+                    ]
+                    .iter()
+                    .collect(),
+                };
+                assert!(self.items.contains_key(&new_pos));
+                Ok(new_pos)
+            }
+            ElfTerminalBlock::LsCommand { dir_listing } => {
+                for (attr, name) in dir_listing.iter() {
+                    let new_pos = ElfContentIndex {
+                        full_path: [
+                            pos.full_path
+                                .to_str()
+                                .ok_or(anyhow!("path to string fail"))?,
+                            name.as_str(),
+                        ]
+                        .iter()
+                        .collect(),
+                    };
+
+                    let parent_node = self.items.get_mut(&pos).ok_or_else(|| {
+                        anyhow!("no parent!!!")
+                    })?;
+                    if let ElfContentKind::Dir { children } = &mut parent_node.kind {
+                        children.push(new_pos.clone());
+                    } else {
+                        bail!("parent is a file not a dir!!!");
+                    }
+
+                    let kind = match attr {
+                        ElfFileAttribute::Dir => ElfContentKind::Dir { children: vec![] },
+                        ElfFileAttribute::Size(size) => ElfContentKind::File { size: *size },
+                    };
+                    let content = ElfContent {
+                        parent: Some(pos.clone()),
+                        kind,
+                    };
+                    content.is_valid();
+
+                    self.items.insert(new_pos, content);
+                }
+                Ok(pos.clone())
+            }
+        }
+    }
 }
-
-#[derive(Debug)]
-struct ElfFile {
-    size: u32,
-}
-
-#[derive(Debug)]
-struct ElfDirectory {
-    parent: ElfParentDirectory,
-    directories: HashMap<String, usize>,
-    files: HashMap<String, usize>,
-}
-
-#[derive(Debug)]
-struct ElfFileSystem {
-    directories: Vec<ElfDirectory>,
-    files: Vec<ElfFile>,
-}
-
-#[derive(Debug)]
-struct ElfDirectorys(HashMap<String, Rc<RefCell<ElfDirectory>>>);
-
-#[derive(Debug)]
-struct ElfFiles(HashMap<String, ElfFile>);
 
 fn process_blocks(block: &str) -> Result<ElfTerminalBlock> {
     let f_block = block.trim().lines().next();
@@ -107,154 +235,28 @@ fn process_blocks(block: &str) -> Result<ElfTerminalBlock> {
     }
 }
 
-impl ElfFileSystem {
-    fn new() -> Self {
-        Self {
-            directories: vec![],
-            files: vec![],
-        }
-    }
-
-    // fn get_root_dir(&self) -> &ElfDirectory {
-    //     &self.directories[0]
-    // }
-
-    // fn get_root_dir_mut(&mut self) -> &mut ElfDirectory {
-    //     &mut self.directories[0]
-    // }
-
-    // fn get_dir(&self, parent: &mut ElfDirectory, name: &str) -> &ElfDirectory {
-    //     let idx = parent.directories.get(name).ok_or(anyhow!("pain"))?;
-
-    //     &self.directories[*idx]
-    // }
-
-    // fn get_dir_mut(&mut self, parent: &mut ElfDirectory, name: &str) -> &mut ElfDirectory {
-    //     let idx = parent.directories.get(name).ok_or(anyhow!("pain"))?;
-
-    //     &mut self.directories[*idx]
-    // }
-
-    // fn get_file(&self, parent: &mut ElfDirectory, name: &str) -> &ElfFile {
-    //     let idx = parent.files.get(name).ok_or(anyhow!("pain"))?;
-
-    //     &self.files[*idx]
-    // }
-
-    // fn get_file_mut(&mut self, parent: &mut ElfDirectory, name: &str) -> &mut ElfFile {
-    //     let idx = parent.directories.get(name).ok_or(anyhow!("pain"))?;
-
-    //     &mut self.files[*idx]
-    // }
-
-    fn get_total_size(&self) -> u32 {
-        self.files.iter().map(|f| f.size).sum()
-    }
-
-    fn process_command(
-        &mut self,
-        cursor_dir_idx: &mut usize,
-        block: &ElfTerminalBlock,
-    ) -> Result<()> {
-        dbg!(*cursor_dir_idx);
-        match block {
-            ElfTerminalBlock::CdCommandRoot => {
-                *self = Self {
-                    directories: vec![ElfDirectory {
-                        parent: ElfParentDirectory::Root,
-                        directories: HashMap::new(),
-                        files: HashMap::new(),
-                    }],
-                    files: vec![],
-                }
-            }
-            ElfTerminalBlock::CdCommandUp => {
-                let cursor_dir = self
-                    .directories
-                    .get(*cursor_dir_idx)
-                    .ok_or(anyhow!("aldjfoa"))?;
-
-                match cursor_dir.parent {
-                    ElfParentDirectory::Root => bail!("OH DEAR"),
-                    ElfParentDirectory::NonRoot(idx) => {
-                        *cursor_dir_idx = idx;
-                    }
-                }
-            }
-            ElfTerminalBlock::CdCommandDown { dir_name } => {
-                let cursor_dir = self
-                    .directories
-                    .get(*cursor_dir_idx)
-                    .ok_or(anyhow!("aldjfoa"))?;
-
-                dbg!(*cursor_dir_idx);
-                dbg!(&self.directories[0]);
-                dbg!(cursor_dir);
-                (*cursor_dir_idx = *cursor_dir
-                    .directories
-                    .get(dir_name.as_str())
-                    .ok_or(anyhow!("Did not get index for {}", &dir_name))?);
-                dbg!(*cursor_dir_idx);
-            }
-            ElfTerminalBlock::LsCommand { dir_listing } => {
-                for (attr, name) in dir_listing.iter() {
-                    match attr {
-                        ElfFileAttribute::Dir => {
-                            self.directories.push(ElfDirectory {
-                                parent: ElfParentDirectory::NonRoot(*cursor_dir_idx),
-                                directories: HashMap::new(),
-                                files: HashMap::new(),
-                            });
-
-                            let len = self.directories.len();
-                            let cursor_dir = self
-                                .directories
-                                .get_mut(*cursor_dir_idx)
-                                .ok_or(anyhow!("aldjfoa"))?;
-
-                            cursor_dir.directories.insert(name.clone(), len - 1);
-                        }
-                        ElfFileAttribute::Size(size) => {
-                            self.files.push(ElfFile { size: *size });
-
-                            let len = self.directories.len();
-                            let cursor_dir = self
-                                .directories
-                                .get_mut(*cursor_dir_idx)
-                                .ok_or(anyhow!("aldjfoa"))?;
-
-                            cursor_dir.files.insert(name.clone(), len - 1);
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(())
-    }
-}
-
 fn part1(terminal_output: &str) -> Result<u32> {
     let mut efs = ElfFileSystem::new();
+    let mut track_pos = efs.root.clone();
+
     let commands_iter = terminal_output
         .split("$")
         .filter(|&s| s != "")
         .map(&process_blocks);
 
-    let mut cursor_dir_idx: usize = 0;
     for command_res in commands_iter {
         match command_res {
             Err(err) => bail!("Ahhhhh, {}", err),
-            Ok(block) => efs.process_command(&mut cursor_dir_idx, &block)?,
+            Ok(block) => track_pos = efs.process_command(&track_pos, &block)?,
         }
-    }
+    };
 
-    Ok(efs.get_total_size())
+    Ok(efs.get_part1_size()?)
 }
 
 fn main() -> Result<()> {
     println!(
-        "Part 1 - Total size of directories with size > {}: <{}>",
+        "Part 1 - Total size of directories with size < {}: <{}>",
         BIG_DIRECTORY_SIZE,
         part1(&INPUT_FILE)?
     );
