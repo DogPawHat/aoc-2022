@@ -13,6 +13,8 @@ pub type Result<T> = anyhow::Result<T>;
 
 const INPUT_PATH: &str = "inputs/day7.txt";
 const BIG_DIRECTORY_SIZE: u32 = 100000;
+const TOTAL_DISK_SIZE: u32 = 70000000;
+const UNUSED_SPACE_TARGET: u32 = 30000000;
 
 lazy_static! {
     static ref INPUT_FILE: String =
@@ -85,30 +87,55 @@ impl ElfFileSystem {
             .ok_or_else(|| anyhow!("did not get node"))?;
         match &this_node.kind {
             ElfContentKind::File { size } => Ok(*size),
-            ElfContentKind::Dir { children } => {
-                children.iter().map(|child| self.get_size_of_node(&child)).sum()
-            }
+            ElfContentKind::Dir { children } => children
+                .iter()
+                .map(|child| self.get_size_of_node(&child))
+                .sum(),
         }
     }
 
-    // fn get_total_size(&self) -> Result<u32> {
-    //     self.get_size_of_node(&self.root)
-    // }
+    fn get_total_size(&self) -> Result<u32> {
+        self.get_size_of_node(&self.root)
+    }
 
     fn get_part1_size(&self) -> Result<u32> {
-        self.items.iter().filter(|(_idx, content)| {
-            if let ElfContentKind::Dir { children: _ } = content.kind {
-                true
-            } else {
-                false
-            }
-        }).map(|(idx, _content)| self.get_size_of_node(idx)).map_ok(|size| {
-            if size < BIG_DIRECTORY_SIZE {
-                size
-            } else {
-                0
-            }
-        }).sum()
+        self.items
+            .iter()
+            .filter(|(_idx, content)| {
+                if let ElfContentKind::Dir { children: _ } = content.kind {
+                    true
+                } else {
+                    false
+                }
+            })
+            .map(|(idx, _content)| self.get_size_of_node(idx))
+            .map_ok(|size| if size < BIG_DIRECTORY_SIZE { size } else { 0 })
+            .sum()
+    }
+
+    fn get_part2_size(&self) -> Result<u32> {
+        let current_size = self.get_total_size()?;
+        let free_space = TOTAL_DISK_SIZE - current_size;
+        let target = if UNUSED_SPACE_TARGET < free_space {
+            0
+        } else {
+            UNUSED_SPACE_TARGET - free_space
+        };
+        dbg!(free_space);
+        dbg!(target);
+
+        self.items
+            .iter()
+            .filter(|(_idx, content)| {
+                if let ElfContentKind::Dir { children: _ } = content.kind {
+                    true
+                } else {
+                    false
+                }
+            })
+            .map(|(idx, _content)| self.get_size_of_node(idx))
+            .filter_ok(|&size| size > target)
+            .fold_ok(TOTAL_DISK_SIZE, u32::min)
     }
 
     fn process_command(
@@ -167,9 +194,10 @@ impl ElfFileSystem {
                         .collect(),
                     };
 
-                    let parent_node = self.items.get_mut(&pos).ok_or_else(|| {
-                        anyhow!("no parent!!!")
-                    })?;
+                    let parent_node = self
+                        .items
+                        .get_mut(&pos)
+                        .ok_or_else(|| anyhow!("no parent!!!"))?;
                     if let ElfContentKind::Dir { children } = &mut parent_node.kind {
                         children.push(new_pos.clone());
                     } else {
@@ -235,7 +263,7 @@ fn process_blocks(block: &str) -> Result<ElfTerminalBlock> {
     }
 }
 
-fn part1(terminal_output: &str) -> Result<u32> {
+fn process_efs(terminal_output: &str) -> Result<ElfFileSystem> {
     let mut efs = ElfFileSystem::new();
     let mut track_pos = efs.root.clone();
 
@@ -249,16 +277,23 @@ fn part1(terminal_output: &str) -> Result<u32> {
             Err(err) => bail!("Ahhhhh, {}", err),
             Ok(block) => track_pos = efs.process_command(&track_pos, &block)?,
         }
-    };
-
-    Ok(efs.get_part1_size()?)
+    }
+    Ok(efs)
 }
 
 fn main() -> Result<()> {
+    let efs = process_efs(&INPUT_FILE)?;
+
     println!(
         "Part 1 - Total size of directories with size < {}: <{}>",
         BIG_DIRECTORY_SIZE,
-        part1(&INPUT_FILE)?
+        efs.get_part1_size()?
     );
+    println!(
+        "Part 2 - Total size of directories with size < {}: <{}>",
+        BIG_DIRECTORY_SIZE,
+        efs.get_part2_size()?
+    );
+
     Ok(())
 }
