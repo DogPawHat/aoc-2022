@@ -1,8 +1,8 @@
 use std::{fmt, fs, str::FromStr};
 
+use colored::{ColoredString, Colorize};
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use colored::{Colorize, ColoredString};
 
 pub type Error = anyhow::Error;
 pub type Result<T> = anyhow::Result<T>;
@@ -23,6 +23,7 @@ struct ElfTree {
 struct ElfTreeVisible {
     height: u32,
     visible: bool,
+    scenic_score: u32,
 }
 
 #[derive(Debug)]
@@ -37,6 +38,7 @@ fn make_edge_vec(tree_vec: &Vec<ElfTree>) -> Vec<ElfTreeVisible> {
         .map(|tree| ElfTreeVisible {
             height: tree.height,
             visible: true,
+            scenic_score: 0,
         })
         .collect()
 }
@@ -89,11 +91,21 @@ impl ElfForest {
                             let mut visible_tree = ElfTreeVisible {
                                 height: tree.height,
                                 visible: false,
+                                scenic_score: 0,
                             };
 
                             if tree.height > tallest_trees_north[inner_idx].height {
                                 visible_tree.visible = true;
-                                tallest_trees_north[inner_idx] = visible_tree
+                                tallest_trees_north[inner_idx] = visible_tree;
+                            }
+
+                            if tree.height == 9 {
+                                visible_tree.scenic_score =
+                                    tallest_trees_north[inner_idx].scenic_score;
+                                tallest_trees_north[inner_idx].scenic_score = 0;
+                            } else {
+                                tallest_trees_north[inner_idx].scenic_score =
+                                    tallest_trees_north[inner_idx].scenic_score + 1;
                             }
 
                             visible_tree
@@ -126,11 +138,21 @@ impl ElfForest {
                             let mut visible_tree = ElfTreeVisible {
                                 height: tree.height,
                                 visible: false,
+                                scenic_score: 1,
                             };
 
                             if tree.height > tallest_trees_south[inner_idx].height {
                                 visible_tree.visible = true;
                                 tallest_trees_south[inner_idx] = visible_tree
+                            }
+
+                            if tree.height == 9 {
+                                visible_tree.scenic_score =
+                                    tallest_trees_south[inner_idx].scenic_score;
+                                tallest_trees_south[inner_idx].scenic_score = 0;
+                            } else {
+                                tallest_trees_south[inner_idx].scenic_score =
+                                    tallest_trees_south[inner_idx].scenic_score + 1;
                             }
 
                             visible_tree
@@ -154,6 +176,7 @@ impl ElfForest {
                 let mut tallest_tree = ElfTreeVisible {
                     visible: true,
                     height: inner_vec.first().unwrap().height,
+                    scenic_score: 0,
                 };
 
                 inner_vec
@@ -167,11 +190,19 @@ impl ElfForest {
                         let mut visible_tree = ElfTreeVisible {
                             height: tree.height,
                             visible: false,
+                            scenic_score: 0,
                         };
 
                         if tree.height > tallest_tree.height {
                             visible_tree.visible = true;
                             tallest_tree = visible_tree
+                        }
+
+                        if tree.height == 9 {
+                            visible_tree.scenic_score = tallest_tree.scenic_score;
+                            tallest_tree.scenic_score = 0;
+                        } else {
+                            tallest_tree.scenic_score = tallest_tree.scenic_score + 1;
                         }
 
                         visible_tree
@@ -191,25 +222,34 @@ impl ElfForest {
                 let mut tallest_tree = ElfTreeVisible {
                     visible: true,
                     height: inner_vec.last().unwrap().height,
+                    scenic_score: 1,
                 };
 
                 inner_vec
                     .iter()
                     .rev()
                     .enumerate()
-                    .map(| (inner_idx, tree)| {
+                    .map(|(inner_idx, tree)| {
                         if dbg!(inner_idx) == 0 {
-                            return dbg!(tallest_tree);
+                            return tallest_tree;
                         }
 
                         let mut visible_tree = ElfTreeVisible {
                             height: tree.height,
                             visible: false,
+                            scenic_score: 1,
                         };
 
                         if tree.height > tallest_tree.height {
                             visible_tree.visible = true;
                             tallest_tree = visible_tree;
+                        }
+
+                        if tree.height == 9 {
+                            visible_tree.scenic_score = tallest_tree.scenic_score;
+                            tallest_tree.scenic_score = 0;
+                        } else {
+                            tallest_tree.scenic_score = tallest_tree.scenic_score + 1;
                         }
 
                         visible_tree
@@ -236,6 +276,9 @@ fn full_visiblity_matrix(
     for (y_idx, vec) in south.0.iter().enumerate() {
         for (x_idx, &tree) in vec.iter().enumerate() {
             if tree.visible {
+                let mut new_tree = tree;
+                new_tree.scenic_score =
+                    new_tree.scenic_score * all_visible[x_idx][y_idx].scenic_score;
                 all_visible[y_idx][x_idx] = tree;
             }
         }
@@ -244,6 +287,9 @@ fn full_visiblity_matrix(
     for (y_idx, vec) in west.0.iter().enumerate() {
         for (x_idx, &tree) in vec.iter().enumerate() {
             if tree.visible {
+                let mut new_tree = tree;
+                new_tree.scenic_score =
+                    new_tree.scenic_score * all_visible[x_idx][y_idx].scenic_score;
                 all_visible[y_idx][x_idx] = tree;
             }
         }
@@ -252,6 +298,9 @@ fn full_visiblity_matrix(
     for (y_idx, vec) in east.0.iter().enumerate() {
         for (x_idx, &tree) in vec.iter().enumerate() {
             if tree.visible {
+                let mut new_tree = tree;
+                new_tree.scenic_score =
+                    new_tree.scenic_score * all_visible[x_idx][y_idx].scenic_score;
                 all_visible[y_idx][x_idx] = tree;
             }
         }
@@ -262,17 +311,20 @@ fn full_visiblity_matrix(
 
 impl fmt::Display for ElfForestVisiblity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let res = 
-            self.0
+        let res = self
+            .0
             .iter()
             .map(|row| {
-                let mut new_row: Vec<_> = row.iter().map(|tree| {
-                    if tree.visible {
-                        tree.height.to_string().green()
-                    } else {
-                        tree.height.to_string().red()
-                    }
-                }).collect();
+                let mut new_row: Vec<_> = row
+                    .iter()
+                    .map(|tree| {
+                        if tree.visible {
+                            tree.height.to_string().green()
+                        } else {
+                            tree.height.to_string().red()
+                        }
+                    })
+                    .collect();
 
                 new_row.push("\n".clear());
                 new_row
@@ -298,20 +350,38 @@ impl ElfForestVisiblity {
             .collect();
         visible_trees.len()
     }
+
+    fn get_largest_scenic_score(&self) -> u32 {
+        self.0
+            .iter()
+            .map(|item| item.iter().map(|&t| t.scenic_score).max().unwrap())
+            .max()
+            .unwrap()
+    }
 }
 
-fn part1(forest: &ElfForest) -> Result<usize> {
-    let visiblity_matrix = full_visiblity_matrix(
+fn make_full_matrix(forest: &ElfForest) -> ElfForestVisiblity {
+    full_visiblity_matrix(
         forest.northern_visibilty_matrix(),
         forest.southern_visibilty_matrix(),
         forest.western_visibilty_matrix(),
         forest.eastern_visibilty_matrix(),
-    );
+    )
+}
 
+fn part1(forest: &ElfForest) -> Result<usize> {
+    let visiblity_matrix = make_full_matrix(&forest);
 
     println!("{}", visiblity_matrix.to_string());
 
     Ok(visiblity_matrix.count_visible_trees())
+}
+
+
+fn part2(forest: &ElfForest) -> Result<u32> {
+    let visiblity_matrix = make_full_matrix(&forest);
+
+    Ok(visiblity_matrix.get_largest_scenic_score())
 }
 
 fn main() -> Result<()> {
@@ -321,5 +391,11 @@ fn main() -> Result<()> {
         "Part 1 - Trees visible from outside grid: <{}>",
         part1(&forest)?
     );
+
+    println!(
+        "Part 1 - Trees visible from outside grid: <{}>",
+        part2(&forest)?
+    );
+
     Ok(())
 }
