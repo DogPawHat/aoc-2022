@@ -1,4 +1,4 @@
-use std::{fs, ops::Index, str::FromStr, collections::HashSet};
+use std::{collections::HashSet, fs, str::FromStr};
 
 use anyhow::{bail, Context};
 use lazy_static::lazy_static;
@@ -28,16 +28,16 @@ lazy_static! {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Direction {
-    Up(u32),
-    Down(u32),
-    Left(u32),
-    Right(u32),
+    Up(i32),
+    Down(i32),
+    Left(i32),
+    Right(i32),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct ElfRopePos {
-    x: u32,
-    y: u32,
+    x: i32,
+    y: i32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,97 +46,130 @@ struct ElfRopeState {
     tail: ElfRopePos,
 }
 
-trait AssociatedPos {
-    type Pos;
+struct ElfRopeStateStepper {
+    direction: Option<Direction>,
+    current_state: ElfRopeState,
 }
 
-impl AssociatedPos for ElfRopePos {
-    type Pos = ElfRopePos;
-}
+impl Iterator for ElfRopeStateStepper {
+    type Item = ElfRopeState;
 
-impl ElfRopeState {
-    fn process_direction(&self, rope_direction: Direction) -> Self {
-        match rope_direction {
+    fn next(&mut self) -> Option<Self::Item> {
+        let remaining_direction = self.direction?;
+
+        let next_state = match remaining_direction {
             Direction::Up(idx) => {
-                let new_head = ElfRopePos {
-                    x: self.head.x + idx,
-                    y: self.head.y,
+                let next_x = self.current_state.head.x + 1;
+                let remaining_steps = idx - 1;
+                if remaining_steps == 0 {
+                    self.direction = None;
+                } else {
+                    self.direction = Some(Direction::Up(remaining_steps));
+                }
+                let next_head = ElfRopePos {
+                    x: next_x,
+                    y: self.current_state.head.y,
                 };
 
-                let mut new_tail = self.tail;
-
-                if self.tail.x < new_head.x - 1 {
-                    new_tail = ElfRopePos {
-                        x: new_head.x - 1,
-                        y: new_head.y,
+                let mut next_tail = self.current_state.tail;
+                if next_tail.x < next_head.x - 1 {
+                    next_tail = ElfRopePos {
+                        x: next_head.x - 1,
+                        y: next_head.y,
                     };
                 }
-
-                Self {
-                    head: new_head,
-                    tail: new_tail,
+                ElfRopeState {
+                    head: next_head,
+                    tail: next_tail,
                 }
             }
             Direction::Down(idx) => {
-                let new_head = ElfRopePos {
-                    x: self.head.x - idx,
-                    y: self.head.y,
+                let next_x = self.current_state.head.x - 1;
+                let remaining_steps = idx - 1;
+                if remaining_steps == 0 {
+                    self.direction = None;
+                } else {
+                    self.direction = Some(Direction::Down(remaining_steps));
+                }
+                let next_head = ElfRopePos {
+                    x: next_x,
+                    y: self.current_state.head.y,
                 };
 
-                let mut new_tail = self.tail;
-
-                if self.tail.x > new_head.x + 1 {
-                    new_tail = ElfRopePos {
-                        x: new_head.x + 1,
-                        y: new_head.y,
+                let mut next_tail = self.current_state.tail;
+                if next_tail.x > next_head.x + 1 {
+                    next_tail = ElfRopePos {
+                        x: next_head.x + 1,
+                        y: next_head.y,
                     };
                 }
-
-                Self {
-                    head: new_head,
-                    tail: new_tail,
+                ElfRopeState {
+                    head: next_head,
+                    tail: next_tail,
                 }
             }
             Direction::Left(idx) => {
-                let new_head = ElfRopePos {
-                    x: self.head.x,
-                    y: self.head.y - idx,
+                let next_y = self.current_state.head.y - 1;
+                let remaining_steps = idx - 1;
+                if remaining_steps == 0 {
+                    self.direction = None;
+                } else {
+                    self.direction = Some(Direction::Down(remaining_steps));
+                }
+                let next_head = ElfRopePos {
+                    x: self.current_state.head.x,
+                    y: next_y,
                 };
 
-                let mut new_tail = self.tail;
-
-                if self.tail.y > new_head.y + 1 {
-                    new_tail = ElfRopePos {
-                        x: new_head.x,
-                        y: new_head.y + 1,
+                let mut next_tail = self.current_state.tail;
+                if next_tail.y > next_head.y + 1 {
+                    next_tail = ElfRopePos {
+                        x: next_head.x,
+                        y: next_head.y + 1,
                     };
                 }
-
-                Self {
-                    head: new_head,
-                    tail: new_tail,
+                ElfRopeState {
+                    head: next_head,
+                    tail: next_tail,
                 }
             }
             Direction::Right(idx) => {
-                let new_head = ElfRopePos {
-                    x: self.head.x,
-                    y: self.head.y + idx,
+                let next_y = self.current_state.head.y + 1;
+                let remaining_steps = idx - 1;
+                if remaining_steps == 0 {
+                    self.direction = None;
+                } else {
+                    self.direction = Some(Direction::Down(remaining_steps));
+                }
+                let next_head = ElfRopePos {
+                    x: self.current_state.head.x,
+                    y: next_y,
                 };
 
-                let mut new_tail = self.tail;
-
-                if self.tail.y < new_head.y - 1 {
-                    new_tail = ElfRopePos {
-                        x: new_head.x,
-                        y: new_head.y - 1,
+                let mut next_tail = self.current_state.tail;
+                if next_tail.y < next_head.y - 1 {
+                    next_tail = ElfRopePos {
+                        x: next_head.x,
+                        y: next_head.y - 1,
                     };
                 }
-
-                Self {
-                    head: new_head,
-                    tail: new_tail,
+                ElfRopeState {
+                    head: next_head,
+                    tail: next_tail,
                 }
             }
+        };
+
+        self.current_state = next_state;
+        Some(next_state)
+    }
+}
+
+impl ElfRopeState {
+    fn rope_state_iter(&self, direction: Direction) -> ElfRopeStateStepper {
+        ElfRopeStateStepper {
+            direction: Some(direction),
+            current_state: *self,
         }
     }
 }
@@ -146,7 +179,7 @@ impl FromStr for Direction {
     fn from_str(s: &str) -> Result<Self> {
         let splitted = s.split_once(" ").context("Failure to split")?;
 
-        let direction_vector: u32 = splitted.1.parse()?;
+        let direction_vector: i32 = splitted.1.parse()?;
 
         match splitted.0 {
             "U" => Ok(Direction::Up(direction_vector)),
@@ -159,35 +192,42 @@ impl FromStr for Direction {
 }
 
 fn part1(directions: Vec<Direction>) -> usize {
-    let init_state = ElfRopeState{
-        tail: ElfRopePos{
-            x: 0,
-            y: 0,
-        },
-        head: ElfRopePos{
-            x: 0,
-            y: 0
-        }
+    let init_state = ElfRopeState {
+        tail: ElfRopePos { x: 0, y: 0 },
+        head: ElfRopePos { x: 0, y: 0 },
     };
 
     let mut tail_pos_set = HashSet::from([init_state.tail]);
 
     let mut rope_state = init_state;
+    let mut next_rope_state = init_state;
+
     for direction in directions {
-        rope_state = rope_state.process_direction(direction);
-        tail_pos_set.insert(rope_state.tail);
+        for new_rope_state in rope_state.rope_state_iter(direction) {
+            tail_pos_set.insert(new_rope_state.tail);
+            next_rope_state = new_rope_state;
+        }
+        rope_state = next_rope_state;
     }
 
     tail_pos_set.len()
 }
 
 fn main() -> Result<()> {
-    todo!()
+    let parsed_puzzle_directions_res: Result<Vec<_>> =
+        PUZZLE_FILE.lines().map(|line| line.parse()).collect();
+
+    println!(
+        "Day 9 - Rope Tail Visits: <{}>",
+        part1(parsed_puzzle_directions_res?)
+    );
+
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{Direction, EXAMPLE_FILE, TEST_EXAMPLE_DIRECTIONS, part1};
+    use crate::{part1, Direction, EXAMPLE_FILE, TEST_EXAMPLE_DIRECTIONS};
 
     #[test]
     fn it_parses_files_correctly() {
